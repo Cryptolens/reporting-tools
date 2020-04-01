@@ -49,14 +49,13 @@ namespace RetrieveAuditLog
 
             while (true)
             {
-                var res2 = HelperMethods.SendRequestToWebAPI3<GetWebAPILogResult>(new GetEventsModel 
+                var res2 = (GetWebAPILogResult)AI.GetWebAPILog(token, new GetWebAPILogModel
                 {
                     Limit = 1000,
-                    ProductId = productId, 
-                    Key = licenseKey, 
-                    StartingAfter = pointer, 
-                    LicenseServerUrl = "https://app.cryptolens.io/"
-                }, "/ai/getwebapilog/", token);
+                    ProductId = productId,
+                    Key = licenseKey,
+                    StartingAfter = (int)pointer,
+                });
 
                 if(res2.Logs.Count == 0)
                 {
@@ -180,21 +179,21 @@ namespace RetrieveAuditLog
         public int FreeSeatsRemaining { get; set; }
     }
 
-    public class GetWebAPILogResult : BasicResult
-    {
-        public List<WebAPILog> Logs { get; set; }
-    }
+    //public class GetWebAPILogResult : BasicResult
+    //{
+    //    public List<WebAPILog> Logs { get; set; }
+    //}
 
-    public class WebAPILog
-    {
-        public long Id { get; set; }
-        public int ProductId { get; set; }
-        public string Key { get; set; }
-        public string IP { get; set; }
-        public long Time { get; set; }
-        public short State { get; set; }
-        public string MachineCode { get; set; }
-    }
+    //public class WebAPILog
+    //{
+    //    public long Id { get; set; }
+    //    public int ProductId { get; set; }
+    //    public string Key { get; set; }
+    //    public string IP { get; set; }
+    //    public long Time { get; set; }
+    //    public short State { get; set; }
+    //    public string MachineCode { get; set; }
+    //}
 
     public class GetEventsModel : RequestModel
     {
