@@ -14,16 +14,20 @@ namespace RetrieveAuditLog
 {
     class Program
     {
+
+        public const int maxFloatingInterval = 10000;
+
         static void Main(string[] args)
         {
             // This token should have GetKey and GetWebAPILog permission.
             string token = "";
 
-            // We need to set 3 things: the product (5693), the license, the floating time interval(100) and the token.
-            var res = GetAuditLog(5693, "FVNZH-QDRNW-OVJYL-TKIHN", 100, token);
+            // We need to set 3 things: the product (5693), the license, the token and the time window (e.g., 24 hours back in time)
+            var res = GetAuditLog(3349, "FAVRX-EHHBS-YSZKB-RIGZI", token, 24);
 
             Console.WriteLine("Max number of machines: " + res.MaxNoOfMachines);
             Console.WriteLine($"At this point, {res.MaxNoOfMachines - res.UsedFloatingLicenses} seats are available.");
+            Console.WriteLine("Displaying history of events 24 h back in time.");
 
             foreach (var log in res.Logs)
             {
@@ -33,7 +37,7 @@ namespace RetrieveAuditLog
             Console.ReadLine();
         }
 
-        static AuditLog GetAuditLog(int productId, string licenseKey, int floatingTimeInteral, string token)
+        static AuditLog GetAuditLog(int productId, string licenseKey, string token, int hours)
         {
             var auditLog = new AuditLog();
 
@@ -41,23 +45,25 @@ namespace RetrieveAuditLog
             var res = Key.GetKey(token, new KeyInfoModel { ProductId = productId, Key = licenseKey, Metadata = true });
             auditLog.MaxNoOfMachines = res.LicenseKey.MaxNoOfMachines;
 
-            // 2. Retrieving the logs associated with the license key. This will be available in the next release tomorrow.
-            // For now, a diffent version is used.
+            // 2. Retrieving the logs associated with the license key. 
 
             var rawLogs = new List<WebAPILog>();
             long pointer = 0;
 
+            DateTimeOffset period = DateTimeOffset.UtcNow.AddHours(-hours);
             while (true)
             {
-                var res2 = (GetWebAPILogResult)AI.GetWebAPILog(token, new GetWebAPILogModel
+                var res2 = AI.GetWebAPILog(token, new GetWebAPILogModel
                 {
                     Limit = 1000,
                     ProductId = productId,
                     Key = licenseKey,
-                    StartingAfter = (int)pointer,
+                    EndingBefore = (int)pointer,
+                    OrderBy = "Time descending",
+                    States = new List<short> { 2014, 2015, 6011 }
                 });
 
-                if(res2.Logs.Count == 0)
+                if (res2.Logs.Count == 0 || res2.Logs.First().Time < period.AddSeconds(-maxFloatingInterval).ToUnixTimeSeconds())
                 {
                     break;
                 }
@@ -65,6 +71,8 @@ namespace RetrieveAuditLog
                 rawLogs.AddRange(res2.Logs);
                 pointer = res2.Logs.Last().Id;
             }
+
+            rawLogs = rawLogs.Where(x => x.FloatingExpires >= period.ToUnixTimeSeconds() || x.Time >= period.ToUnixTimeSeconds()).OrderBy(x => x.Time).ToList();
 
             var preprocesedLogs = new List<Activity>();
 
@@ -88,12 +96,12 @@ namespace RetrieveAuditLog
                         // floating
                         if (floatingLicenses.ContainsKey(webAPIEntry.MachineCode))
                         {
-                            floatingLicenses[webAPIEntry.MachineCode] = webAPIEntry.Time + floatingTimeInteral;
+                            floatingLicenses[webAPIEntry.MachineCode] = webAPIEntry.FloatingExpires;
                             action = "Verification";
                         }
                         else
                         {
-                            floatingLicenses.Add(webAPIEntry.MachineCode, webAPIEntry.Time + floatingTimeInteral);
+                            floatingLicenses.Add(webAPIEntry.MachineCode, webAPIEntry.FloatingExpires);
                         }
                     }
                 }
@@ -179,37 +187,4 @@ namespace RetrieveAuditLog
         public int FreeSeatsRemaining { get; set; }
     }
 
-    //public class GetWebAPILogResult : BasicResult
-    //{
-    //    public List<WebAPILog> Logs { get; set; }
-    //}
-
-    //public class WebAPILog
-    //{
-    //    public long Id { get; set; }
-    //    public int ProductId { get; set; }
-    //    public string Key { get; set; }
-    //    public string IP { get; set; }
-    //    public long Time { get; set; }
-    //    public short State { get; set; }
-    //    public string MachineCode { get; set; }
-    //}
-
-    public class GetEventsModel : RequestModel
-    {
-        public int Limit { get; set; }
-        public long StartingAfter { get; set; }
-        public int ProductId { get; set; }
-        public string Key { get; set; }
-    }
-    public class KeyInfoModelV2 : RequestModel
-    {
-        public int ProductId { get; set; }
-        public string Key { get; set; }
-        public bool Sign { get; set; }
-        public SignMethod SignMethod { get; set; }
-        public bool Metadata { get; set; }
-        public int FloatingTimeInterval { get; set; }
-        public int FieldsToReturn { get; set; }
-    }
 }

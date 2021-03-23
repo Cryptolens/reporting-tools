@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Cryptolens.Licensing" Version="4.0.24" />
+    <PackageReference Include="Cryptolens.Licensing" Version="4.0.33" />
   </ItemGroup>
 
 </Project>
