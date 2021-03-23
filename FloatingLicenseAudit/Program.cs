@@ -14,10 +14,13 @@ namespace RetrieveAuditLog
 {
     class Program
     {
+
+        public const int maxFloatingInterval = 10000;
+
         static void Main(string[] args)
         {
             // This token should have GetKey and GetWebAPILog permission.
-            string token = "=";
+            string token = "";
 
             // We need to set 3 things: the product (5693), the license, the token and the time window (e.g., 24 hours back in time)
             var res = GetAuditLog(3349, "FAVRX-EHHBS-YSZKB-RIGZI", token, 24);
@@ -42,8 +45,7 @@ namespace RetrieveAuditLog
             var res = Key.GetKey(token, new KeyInfoModel { ProductId = productId, Key = licenseKey, Metadata = true });
             auditLog.MaxNoOfMachines = res.LicenseKey.MaxNoOfMachines;
 
-            // 2. Retrieving the logs associated with the license key. This will be available in the next release tomorrow.
-            // For now, a different version is used.
+            // 2. Retrieving the logs associated with the license key. 
 
             var rawLogs = new List<WebAPILog>();
             long pointer = 0;
@@ -61,7 +63,7 @@ namespace RetrieveAuditLog
                     States = new List<short> { 2014, 2015, 6011 }
                 });
 
-                if (res2.Logs.Count == 0 || res2.Logs.First().Time < period.ToUnixTimeSeconds())
+                if (res2.Logs.Count == 0 || res2.Logs.First().Time < period.AddSeconds(-maxFloatingInterval).ToUnixTimeSeconds())
                 {
                     break;
                 }
@@ -70,7 +72,7 @@ namespace RetrieveAuditLog
                 pointer = res2.Logs.Last().Id;
             }
 
-            rawLogs = rawLogs.Where(x => x.Time >= period.ToUnixTimeSeconds()).OrderBy(x=> x.Time).ToList();
+            rawLogs = rawLogs.Where(x => x.FloatingExpires >= period.ToUnixTimeSeconds() || x.Time >= period.ToUnixTimeSeconds()).OrderBy(x => x.Time).ToList();
 
             var preprocesedLogs = new List<Activity>();
 
