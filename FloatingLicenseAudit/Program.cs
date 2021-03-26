@@ -72,7 +72,12 @@ namespace RetrieveAuditLog
                 pointer = res2.Logs.Last().Id;
             }
 
-            rawLogs = rawLogs.Where(x => x.FloatingExpires >= period.ToUnixTimeSeconds() || x.Time >= period.ToUnixTimeSeconds()).OrderBy(x => x.Time).ToList();
+            rawLogs = rawLogs.Where(x => x.FloatingExpires >= period.ToUnixTimeSeconds() ||
+                                         x.Time >= period.ToUnixTimeSeconds() ||
+                                         (x.Time < period.ToUnixTimeSeconds() && x.State == 6011)
+            ).OrderBy(x => x.Time).ToList();
+
+            
 
             var preprocesedLogs = new List<Activity>();
 
