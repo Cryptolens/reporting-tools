@@ -14,16 +14,23 @@ namespace RetrieveAuditLog
 {
     class Program
     {
+        /**
+         * Before the script can run, please create two access tokens,
+         * one with GetKey permission and another with GetWebAPILog permission.
+         * You can create them here: https://app.cryptolens.io/User/AccessToken#/
+         */
+        public static string token_GetKey = "";
+        public static string token_GetWebAPILog = "";
 
         public const int maxFloatingInterval = 10000;
+
 
         static void Main(string[] args)
         {
             // This token should have GetKey and GetWebAPILog permission.
-            string token = "";
 
-            // We need to set 3 things: the product (5693), the license, the token and the time window (e.g., 24 hours back in time)
-            var res = GetAuditLog(3349, "FAVRX-EHHBS-YSZKB-RIGZI", token, 24);
+            // We need to set 3 things: the product (5693), the license and the time window (e.g., 24 hours back in time)
+            var res = GetAuditLog(5693, "FAVRX-EHHBS-YSZKB-RIGZI", 24);
 
             Console.WriteLine("Max number of machines: " + res.MaxNoOfMachines);
             Console.WriteLine($"At this point, {res.MaxNoOfMachines - res.UsedFloatingLicenses} seats are available.");
@@ -31,18 +38,18 @@ namespace RetrieveAuditLog
 
             foreach (var log in res.Logs)
             {
-                Console.WriteLine(log.Time + "\t" + log.Action + "\t" + log.FreeSeatsRemaining  + "\t" + log.MachineId);
+                Console.WriteLine(log.Time + "\t" + log.Action + "\t" + log.FreeSeatsRemaining + "\t" + log.MachineId);
             }
 
             Console.ReadLine();
         }
 
-        static AuditLog GetAuditLog(int productId, string licenseKey, string token, int hours)
+        static AuditLog GetAuditLog(int productId, string licenseKey, int hours)
         {
             var auditLog = new AuditLog();
 
             // 1. Getting the LicenseKey (for max no of machines)
-            var res = Key.GetKey(token, new KeyInfoModel { ProductId = productId, Key = licenseKey, Metadata = true });
+            var res = Key.GetKey(token_GetKey, new KeyInfoModel { ProductId = productId, Key = licenseKey, Metadata = true });
             auditLog.MaxNoOfMachines = res.LicenseKey.MaxNoOfMachines;
 
             // 2. Retrieving the logs associated with the license key. 
@@ -53,7 +60,7 @@ namespace RetrieveAuditLog
             DateTimeOffset period = DateTimeOffset.UtcNow.AddHours(-hours);
             while (true)
             {
-                var res2 = AI.GetWebAPILog(token, new GetWebAPILogModel
+                var res2 = AI.GetWebAPILog(token_GetWebAPILog, new GetWebAPILogModel
                 {
                     Limit = 1000,
                     ProductId = productId,
@@ -77,7 +84,6 @@ namespace RetrieveAuditLog
                                          (x.Time < period.ToUnixTimeSeconds() && x.State == 6011)
             ).OrderBy(x => x.Time).ToList();
 
-            
 
             var preprocesedLogs = new List<Activity>();
 
@@ -86,17 +92,17 @@ namespace RetrieveAuditLog
             foreach (var webAPIEntry in rawLogs)
             {
                 // we don't want to include activations/deactivations that were not successful.
-                if(webAPIEntry.State % 100 / 10 == 2) { continue; }
+                if (webAPIEntry.State % 100 / 10 == 2) { continue; }
 
                 // ignore the node-locked case
-                if(webAPIEntry.State == 2010 || webAPIEntry.State == 2011 || webAPIEntry.State == 2012 || webAPIEntry.State == 2013) { continue; }
+                if (webAPIEntry.State == 2010 || webAPIEntry.State == 2011 || webAPIEntry.State == 2012 || webAPIEntry.State == 2013) { continue; }
 
                 string action = "";
-                if(webAPIEntry.State / 1000 == 2) 
+                if (webAPIEntry.State / 1000 == 2)
                 {
                     action = "Activation";
 
-                    if(webAPIEntry.State == 2014 || webAPIEntry.State == 2015)
+                    if (webAPIEntry.State == 2014 || webAPIEntry.State == 2015)
                     {
                         // floating
                         if (floatingLicenses.ContainsKey(webAPIEntry.MachineCode))
@@ -154,12 +160,12 @@ namespace RetrieveAuditLog
                 preprocesedLogs.Add(new Activity { Time = DateTimeOffset.FromUnixTimeSeconds(inactiveDevice.Value).DateTime, Action = "Deactivation", MachineId = inactiveDevice.Key, FreeSeatsRemaining = int.MinValue/*auditLog.MaxNoOfMachines - activeFloatingSeats*/ });
                 floatingLicenses.Remove(inactiveDevice.Key);
             }
-            preprocesedLogs = preprocesedLogs.OrderBy(x=> x.Time).ToList();
+            preprocesedLogs = preprocesedLogs.OrderBy(x => x.Time).ToList();
 
             // fix the number of active seats for licenses that were automatically deactivated.
             for (int i = 0; i < preprocesedLogs.Count; i++)
             {
-                if(preprocesedLogs[i].FreeSeatsRemaining == int.MinValue)
+                if (preprocesedLogs[i].FreeSeatsRemaining == int.MinValue)
                 {
                     // do Min just in case floating overdraft was used.
                     preprocesedLogs[i].FreeSeatsRemaining = Math.Min(preprocesedLogs[i - 1].FreeSeatsRemaining + 1, auditLog.MaxNoOfMachines);
