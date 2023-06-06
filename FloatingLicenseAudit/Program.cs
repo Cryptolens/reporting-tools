@@ -36,9 +36,11 @@ namespace RetrieveAuditLog
             Console.WriteLine($"At this point, {res.MaxNoOfMachines - res.UsedFloatingLicenses} seats are available.");
             Console.WriteLine("Displaying history of events 24 h back in time.");
 
+            Console.WriteLine("Time" + "\t" + "Action" + "\t" + "Free seats" + "\t" + "Machine Id" + "\t" + "Friendly name");
+
             foreach (var log in res.Logs)
             {
-                Console.WriteLine(log.Time + "\t" + log.Action + "\t" + log.FreeSeatsRemaining + "\t" + log.MachineId);
+                Console.WriteLine(log.Time + "\t" + log.Action + "\t" + log.FreeSeatsRemaining + "\t" + log.MachineId + "\t" + log.FriendlyName);
             }
 
             Console.ReadLine();
@@ -67,7 +69,7 @@ namespace RetrieveAuditLog
                     Key = licenseKey,
                     EndingBefore = (int)pointer,
                     OrderBy = "Time descending",
-                    States = new List<short> { 2014, 2015, 6011 }
+                    States = new List<short> { 2014, 2015, 6011, 2024 }
                 });
 
                 if (res2.Logs.Count == 0 || res2.Logs.First().Time < period.AddSeconds(-maxFloatingInterval).ToUnixTimeSeconds())
@@ -81,7 +83,8 @@ namespace RetrieveAuditLog
 
             rawLogs = rawLogs.Where(x => x.FloatingExpires >= period.ToUnixTimeSeconds() ||
                                          x.Time >= period.ToUnixTimeSeconds() ||
-                                         (x.Time < period.ToUnixTimeSeconds() && x.State == 6011)
+                                         (x.Time < period.ToUnixTimeSeconds() && x.State == 6011) ||
+                                          x.State == 2024
             ).OrderBy(x => x.Time).ToList();
 
 
@@ -92,12 +95,17 @@ namespace RetrieveAuditLog
             foreach (var webAPIEntry in rawLogs)
             {
                 // we don't want to include activations/deactivations that were not successful.
-                if (webAPIEntry.State % 100 / 10 == 2) { continue; }
+                if (webAPIEntry.State % 100 / 10 == 2 && webAPIEntry.State != 2024) { continue; }
 
                 // ignore the node-locked case
                 if (webAPIEntry.State == 2010 || webAPIEntry.State == 2011 || webAPIEntry.State == 2012 || webAPIEntry.State == 2013) { continue; }
 
                 string action = "";
+                if (webAPIEntry.State == 2024)
+                {
+                    // no more free floating licenses
+                    action = "DeviceLimitReached";
+                }
                 if (webAPIEntry.State / 1000 == 2)
                 {
                     action = "Activation";
@@ -138,14 +146,14 @@ namespace RetrieveAuditLog
 
                 int activeFloatingSeats = floatingLicenses.Where(x => x.Value > webAPIEntry.Time).Count();
 
-                preprocesedLogs.Add(new Activity { Time = DateTimeOffset.FromUnixTimeSeconds(webAPIEntry.Time).DateTime, Action = action, MachineId = webAPIEntry.MachineCode, FreeSeatsRemaining = auditLog.MaxNoOfMachines - activeFloatingSeats });
+                preprocesedLogs.Add(new Activity { Time = DateTimeOffset.FromUnixTimeSeconds(webAPIEntry.Time).DateTime, Action = action, MachineId = webAPIEntry.MachineCode, FreeSeatsRemaining = auditLog.MaxNoOfMachines - activeFloatingSeats, FriendlyName = webAPIEntry.FriendlyName });
 
                 // now, let's check if some devices are no longer used.
                 var inactiveFloatingSeats = floatingLicenses.Where(x => x.Value <= webAPIEntry.Time && x.Value > 0);
 
                 foreach (var inactiveDevice in inactiveFloatingSeats)
                 {
-                    preprocesedLogs.Add(new Activity { Time = DateTimeOffset.FromUnixTimeSeconds(inactiveDevice.Value).DateTime, Action = "Deactivation", MachineId = inactiveDevice.Key, FreeSeatsRemaining = int.MinValue/*auditLog.MaxNoOfMachines - activeFloatingSeats*/ });
+                    preprocesedLogs.Add(new Activity { Time = DateTimeOffset.FromUnixTimeSeconds(inactiveDevice.Value).DateTime, Action = "Deactivation", MachineId = inactiveDevice.Key, FreeSeatsRemaining = int.MinValue/*auditLog.MaxNoOfMachines - activeFloatingSeats*/, FriendlyName = webAPIEntry.FriendlyName });
                     floatingLicenses.Remove(inactiveDevice.Key);
                 }
             }
@@ -157,7 +165,7 @@ namespace RetrieveAuditLog
 
             foreach (var inactiveDevice in inactiveFloatingSeatsFinal)
             {
-                preprocesedLogs.Add(new Activity { Time = DateTimeOffset.FromUnixTimeSeconds(inactiveDevice.Value).DateTime, Action = "Deactivation", MachineId = inactiveDevice.Key, FreeSeatsRemaining = int.MinValue/*auditLog.MaxNoOfMachines - activeFloatingSeats*/ });
+                preprocesedLogs.Add(new Activity { Time = DateTimeOffset.FromUnixTimeSeconds(inactiveDevice.Value).DateTime, Action = "Deactivation", MachineId = inactiveDevice.Key, FreeSeatsRemaining = int.MinValue/*auditLog.MaxNoOfMachines - activeFloatingSeats*/, FriendlyName = webAPIEntry.FriendlyName });
                 floatingLicenses.Remove(inactiveDevice.Key);
             }
             preprocesedLogs = preprocesedLogs.OrderBy(x => x.Time).ToList();
@@ -194,7 +202,7 @@ namespace RetrieveAuditLog
         public DateTime Time { get; set; }
         public string Action { get; set; }
         public string MachineId { get; set; }
-
+        public string FriendlyName { get; set; }
         public int FreeSeatsRemaining { get; set; }
     }
 
