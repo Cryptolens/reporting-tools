@@ -165,7 +165,7 @@ namespace RetrieveAuditLog
 
             foreach (var inactiveDevice in inactiveFloatingSeatsFinal)
             {
-                preprocesedLogs.Add(new Activity { Time = DateTimeOffset.FromUnixTimeSeconds(inactiveDevice.Value).DateTime, Action = "Deactivation", MachineId = inactiveDevice.Key, FreeSeatsRemaining = int.MinValue/*auditLog.MaxNoOfMachines - activeFloatingSeats*/, FriendlyName = webAPIEntry.FriendlyName });
+                preprocesedLogs.Add(new Activity { Time = DateTimeOffset.FromUnixTimeSeconds(inactiveDevice.Value).DateTime, Action = "Deactivation", MachineId = inactiveDevice.Key, FreeSeatsRemaining = int.MinValue/*auditLog.MaxNoOfMachines - activeFloatingSeats*/, FriendlyName = "" });
                 floatingLicenses.Remove(inactiveDevice.Key);
             }
             preprocesedLogs = preprocesedLogs.OrderBy(x => x.Time).ToList();
